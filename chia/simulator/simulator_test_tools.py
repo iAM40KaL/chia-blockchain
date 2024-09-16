@@ -4,10 +4,11 @@ import sys
 from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, Optional, Tuple
 
-from blspy import PrivateKey
+from chia_rs import PrivateKey
 
 from chia.consensus.coinbase import create_puzzlehash_for_pk
 from chia.daemon.server import WebSocketServer, daemon_launch_lock_path
+from chia.server.signal_handlers import SignalHandlers
 from chia.simulator.full_node_simulator import FullNodeSimulator
 from chia.simulator.socket import find_available_listen_port
 from chia.simulator.ssl_certs import (
@@ -26,7 +27,6 @@ from chia.util.errors import KeychainFingerprintExists
 from chia.util.ints import uint32
 from chia.util.keychain import Keychain
 from chia.util.lock import Lockfile
-from chia.util.misc import SignalHandlers
 from chia.wallet.derive_keys import master_sk_to_wallet_sk
 
 """
@@ -42,7 +42,7 @@ def mnemonic_fingerprint(keychain: Keychain) -> Tuple[str, int]:
     )
     # add key to keychain
     try:
-        sk = keychain.add_private_key(mnemonic)
+        sk = keychain.add_key(mnemonic)
     except KeychainFingerprintExists:
         pass
     fingerprint = sk.get_g1().get_fingerprint()
@@ -108,13 +108,11 @@ def create_config(
 
 async def start_simulator(chia_root: Path, automated_testing: bool = False) -> AsyncGenerator[FullNodeSimulator, None]:
     sys.argv = [sys.argv[0]]  # clear sys.argv to avoid issues with config.yaml
-    service = await start_simulator_main(True, automated_testing, root_path=chia_root)
-    await service.start()
+    started_simulator = await start_simulator_main(True, automated_testing, root_path=chia_root)
+    service = started_simulator.service
 
-    yield service._api
-
-    service.stop()
-    await service.wait_closed()
+    async with service.manage():
+        yield service._api
 
 
 async def get_full_chia_simulator(
@@ -138,12 +136,12 @@ async def get_full_chia_simulator(
     with Lockfile.create(daemon_launch_lock_path(chia_root)):
         mnemonic, fingerprint = mnemonic_fingerprint(keychain)
 
-        ssl_ca_cert_and_key_wrapper: SSLTestCollateralWrapper[
-            SSLTestCACertAndPrivateKey
-        ] = get_next_private_ca_cert_and_key()
-        ssl_nodes_certs_and_keys_wrapper: SSLTestCollateralWrapper[
-            SSLTestNodeCertsAndKeys
-        ] = get_next_nodes_certs_and_keys()
+        ssl_ca_cert_and_key_wrapper: SSLTestCollateralWrapper[SSLTestCACertAndPrivateKey] = (
+            get_next_private_ca_cert_and_key()
+        )
+        ssl_nodes_certs_and_keys_wrapper: SSLTestCollateralWrapper[SSLTestNodeCertsAndKeys] = (
+            get_next_nodes_certs_and_keys()
+        )
         if config is None:
             config = create_config(
                 chia_root,

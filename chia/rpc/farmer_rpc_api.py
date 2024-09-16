@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import operator
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, ClassVar, Dict, List, Optional, Tuple
 
 from typing_extensions import Protocol
 
@@ -11,26 +11,19 @@ from chia.plot_sync.receiver import Receiver
 from chia.protocols.harvester_protocol import Plot
 from chia.rpc.rpc_server import Endpoint, EndpointResult
 from chia.types.blockchain_format.sized_bytes import bytes32
-from chia.util.byte_types import hexstr_to_bytes
 from chia.util.ints import uint32
 from chia.util.paginator import Paginator
 from chia.util.streamable import Streamable, streamable
 from chia.util.ws_message import WsRpcMessage, create_payload_dict
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class PaginatedRequestData(Protocol):
-    @property
-    def node_id(self) -> bytes32:
-        pass
+    node_id: bytes32
+    page: uint32
+    page_size: uint32
 
-    @property
-    def page(self) -> uint32:
-        pass
-
-    @property
-    def page_size(self) -> uint32:
-        pass
+    __match_args__: ClassVar[Tuple[str, ...]] = ()
 
 
 @streamable
@@ -50,6 +43,8 @@ class PlotInfoRequestData(Streamable):
     sort_key: str = "filename"
     reverse: bool = False
 
+    __match_args__: ClassVar[Tuple[str, ...]] = ()
+
 
 @streamable
 @dataclasses.dataclass(frozen=True)
@@ -59,6 +54,8 @@ class PlotPathRequestData(Streamable):
     page_size: uint32
     filter: List[str] = dataclasses.field(default_factory=list)
     reverse: bool = False
+
+    __match_args__: ClassVar[Tuple[str, ...]] = ()
 
 
 def paginated_plot_request(source: List[Any], request: PaginatedRequestData) -> Dict[str, object]:
@@ -356,7 +353,7 @@ class FarmerRpcApi:
         return self.paginated_plot_path_request(Receiver.duplicates, request_dict)
 
     async def get_pool_login_link(self, request: Dict[str, Any]) -> EndpointResult:
-        launcher_id: bytes32 = bytes32(hexstr_to_bytes(request["launcher_id"]))
+        launcher_id: bytes32 = bytes32.from_hexstr(request["launcher_id"])
         login_link: Optional[str] = await self.service.generate_login_link(launcher_id)
         if login_link is None:
             raise ValueError(f"Failed to generate login link for {launcher_id.hex()}")

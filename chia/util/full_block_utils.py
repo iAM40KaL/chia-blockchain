@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import io
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple
 
-from blspy import G1Element, G2Element
-from chia_rs import serialized_length
+from chia_rs import G1Element, G2Element, serialized_length
 from chiabip158 import PyBIP158
 
 from chia.types.blockchain_format.coin import Coin
@@ -206,7 +204,7 @@ def skip_transactions_info(buf: memoryview) -> memoryview:
     return skip_list(buf, skip_coin)
 
 
-def generator_from_block(buf: memoryview) -> Optional[SerializedProgram]:
+def generator_from_block(buf: memoryview) -> Optional[bytes]:
     buf = skip_list(buf, skip_end_of_sub_slot_bundle)  # finished_sub_slots
     buf = skip_reward_chain_block(buf)  # reward_chain_block
     buf = skip_optional(buf, skip_vdf_proof)  # challenge_chain_sp_proof
@@ -224,7 +222,7 @@ def generator_from_block(buf: memoryview) -> Optional[SerializedProgram]:
 
     buf = buf[1:]
     length = serialized_length(buf)
-    return SerializedProgram.from_bytes(bytes(buf[:length]))
+    return bytes(buf[:length])
 
 
 # this implements the BlockInfo protocol
@@ -299,8 +297,7 @@ def header_block_from_block(
             transactions_info_optional = bytes([0])
         else:
             transactions_info_optional = bytes([1])
-            buf3 = buf2[1:]
-            transactions_info = TransactionsInfo.parse(io.BytesIO(buf3))
+            transactions_info, advance = TransactionsInfo.parse_rust(buf2[1:])
         byte_array_tx: List[bytearray] = []
         if is_transaction_block and transactions_info:
             addition_coins = tx_addition_coins + list(transactions_info.reward_claims_incorporated)

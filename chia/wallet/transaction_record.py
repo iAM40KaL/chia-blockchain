@@ -1,19 +1,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Generic, List, Optional, Tuple, Type, TypeVar
+from typing import Any, Dict, Generic, List, Optional, Tuple, Type, TypeVar
 
 from chia.consensus.coinbase import farmer_parent_id, pool_parent_id
 from chia.types.blockchain_format.coin import Coin
 from chia.types.blockchain_format.sized_bytes import bytes32
 from chia.types.mempool_inclusion_status import MempoolInclusionStatus
-from chia.types.spend_bundle import SpendBundle
 from chia.util.bech32m import decode_puzzle_hash, encode_puzzle_hash
 from chia.util.errors import Err
 from chia.util.ints import uint8, uint32, uint64
 from chia.util.streamable import Streamable, streamable
 from chia.wallet.conditions import ConditionValidTimes
 from chia.wallet.util.transaction_type import TransactionType
+from chia.wallet.wallet_spend_bundle import WalletSpendBundle
 
 T = TypeVar("T")
 _T_TransactionRecord = TypeVar("_T_TransactionRecord", bound="TransactionRecordOld")
@@ -24,7 +24,7 @@ minimum_send_attempts = 6
 @dataclass
 class ItemAndTransactionRecords(Generic[T]):
     item: T
-    transaction_records: List["TransactionRecord"]
+    transaction_records: List[TransactionRecord]
 
 
 @streamable
@@ -41,7 +41,7 @@ class TransactionRecordOld(Streamable):
     fee_amount: uint64
     confirmed: bool
     sent: uint32
-    spend_bundle: Optional[SpendBundle]
+    spend_bundle: Optional[WalletSpendBundle]
     additions: List[Coin]
     removals: List[Coin]
     wallet_id: uint32
@@ -57,11 +57,10 @@ class TransactionRecordOld(Streamable):
     memos: List[Tuple[bytes32, List[bytes]]]
 
     def is_in_mempool(self) -> bool:
-        # If one of the nodes we sent it to responded with success, we set it to success
+        # If one of the nodes we sent it to responded with success or pending, we return True
         for _, mis, _ in self.sent_to:
-            if MempoolInclusionStatus(mis) == MempoolInclusionStatus.SUCCESS:
+            if MempoolInclusionStatus(mis) in (MempoolInclusionStatus.SUCCESS, MempoolInclusionStatus.PENDING):
                 return True
-        # Note, transactions pending inclusion (pending) return false
         return False
 
     def height_farmed(self, genesis_challenge: bytes32) -> Optional[uint32]:
@@ -101,6 +100,13 @@ class TransactionRecordOld(Streamable):
             memos_list.append((coin_id, memos))
         modified_tx["memos"] = memos_list
         return cls.from_json_dict(modified_tx)
+
+    @classmethod
+    def from_json_dict(cls: Type[_T_TransactionRecord], json_dict: Dict[str, Any]) -> _T_TransactionRecord:
+        try:
+            return super().from_json_dict(json_dict)
+        except Exception:
+            return cls.from_json_dict_convenience(json_dict)
 
     def to_json_dict_convenience(self, config: Dict) -> Dict:
         selected = config["selected_network"]

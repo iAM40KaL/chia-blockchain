@@ -127,7 +127,7 @@ if [ "$1" = "-h" ] || [ "$1" = "" ]; then
   exit 0
 fi
 
-DEFAULT_BLADEBIT_VERSION="v3.0.0"
+DEFAULT_BLADEBIT_VERSION="v3.1.0"
 DEFAULT_BLADEBIT_VERSION_FOR_MACOS="v2.0.1"
 DEFAULT_MADMAX_VERSION="0.0.2"
 VERSION=
@@ -167,8 +167,7 @@ if [ "$VIRTUAL_ENV" = "" ]; then
 fi
 
 if [ "$(id -u)" = 0 ]; then
-  echo "ERROR: Plotter can not be installed or run by the root user."
-  exit 1
+  echo "WARN: Plotter should not be installed or run by the root user."
 fi
 
 OS=""
